@@ -1,0 +1,3 @@
+# Jobs poll their contract's own readiness check, so a missed run is retried on the next tick.
+# supercronic never overlaps runs of the same job.
+*/30 * * * * /app/jobs/distribute-yield.sh

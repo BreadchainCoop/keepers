@@ -1,0 +1,16 @@
+services:
+  keeper:
+    build: .
+    restart: unless-stopped
+    environment:
+      KEEPER_PRIVATE_KEY: ${KEEPER_PRIVATE_KEY:?}
+      RPC_URLS: ${RPC_URLS:-https://rpc.gnosischain.com,https://gnosis-rpc.publicnode.com}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      HEALTHCHECK_URL: ${HEALTHCHECK_URL:-}
+      MIN_BALANCE_XDAI: ${MIN_BALANCE_XDAI:-0.2}
+      DRY_RUN: ${DRY_RUN:-}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
