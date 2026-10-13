@@ -2,6 +2,9 @@ services:
   keeper:
     build: .
     restart: unless-stopped
+    # Shares a host with other services; a run peaks around 25 MB.
+    mem_limit: 128m
+    cpus: 0.25
     environment:
       KEEPER_PRIVATE_KEY: ${KEEPER_PRIVATE_KEY:?}
       RPC_URLS: ${RPC_URLS:-https://rpc.gnosischain.com,https://gnosis-rpc.publicnode.com}
