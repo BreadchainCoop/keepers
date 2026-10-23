@@ -32,14 +32,17 @@ esac
 rpc_urls_var=${PREFIX}_RPC_URLS
 contract_var=${PREFIX}_ADDRESS
 min_balance_var=${PREFIX}_MIN_BALANCE
+healthcheck_var=${PREFIX}_HEALTHCHECK_URL
 RPC_URLS=${!rpc_urls_var:-$DEFAULT_RPC_URLS}
 EXPLORER_TX_URL=$DEFAULT_EXPLORER_TX_URL
-HEALTHCHECK_URL=${SAVING_CIRCLES_HEALTHCHECK_URL:-${HEALTHCHECK_URL:-}}
+# One check per network and no fallback to HEALTHCHECK_URL: another job's or network's success ping
+# would otherwise mark this one healthy.
+HEALTHCHECK_URL=${!healthcheck_var:-}
 
 JOB=saving-circles-$NETWORK
 . "$(dirname "$0")/../lib/common.sh"
 
-: "${SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY:?SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY is required}"
+[ -n "${SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY:-}" ] || fail "SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY is not set."
 CONTRACT=${!contract_var:-$DEFAULT_CONTRACT}
 MIN_BALANCE=${!min_balance_var:-$DEFAULT_MIN_BALANCE}
 # The batch wraps each member in try/catch, so eth_estimateGas finds a limit where the batch succeeds but
@@ -55,10 +58,12 @@ CLAIM_FAILED_TOPIC=0xb9a339b2cf3a8502be61372ea29041d145f88f72022f37353ac66786976
 
 rpc=$(pick_rpc) || fail "no RPC endpoint reachable (${RPC_URLS})"
 
-keeper=$(cast wallet address --private-key "$SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY")
+keeper=$(cast wallet address --private-key "$SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY") \
+  || fail "SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY is not a valid private key."
 
 # Only automationExecutor may call the batch functions, so a mismatch means every send would revert.
-executor=$(cast call "$CONTRACT" "automationExecutor()(address)" --rpc-url "$rpc")
+executor=$(cast call "$CONTRACT" "automationExecutor()(address)" --rpc-url "$rpc" 2>&1) \
+  || fail "reading automationExecutor failed: $(head -c 500 <<<"$executor")"
 if [ "$(tr '[:upper:]' '[:lower:]' <<<"$executor")" != "$(tr '[:upper:]' '[:lower:]' <<<"$keeper")" ]; then
   if [ -n "${DRY_RUN:-}" ]; then
     log "DRY_RUN: keeper $keeper is not automationExecutor ($executor); sends would revert"
@@ -67,17 +72,27 @@ if [ "$(tr '[:upper:]' '[:lower:]' <<<"$executor")" != "$(tr '[:upper:]' '[:lowe
   fi
 fi
 
-balance=$(cast balance "$keeper" --ether --rpc-url "$rpc")
+balance=$(cast balance "$keeper" --ether --rpc-url "$rpc" 2>&1) \
+  || fail "reading keeper balance failed: $(head -c 500 <<<"$balance")"
 if awk -v b="$balance" -v m="$MIN_BALANCE" 'BEGIN { exit !(b < m) }'; then
   alert low-balance "keeper \`$keeper\` has $balance $SYMBOL (below $MIN_BALANCE). Top it up."
 else
   clear_alert low-balance
 fi
 
+errors=()
+
+# Records instead of exiting so a failed deposit batch doesn't also hold back claims.
+checker_error() {
+  log "ERROR: $1"
+  errors+=("$1")
+}
+
 run_checker() {
   local checker=$1 failed_topic=$2 result can_exec payload gas gas_limit out tx failures empty_reason
 
-  result=$(cast call "$CONTRACT" "$checker()(bool,bytes)" --rpc-url "$rpc")
+  result=$(cast call "$CONTRACT" "$checker()(bool,bytes)" --rpc-url "$rpc" 2>&1) \
+    || { checker_error "$checker: call failed: $(head -c 500 <<<"$result")"; return 0; }
   can_exec=$(sed -n 1p <<<"$result")
   payload=$(sed -n 2p <<<"$result")
 
@@ -85,13 +100,17 @@ run_checker() {
     log "$checker: not due"
     return 0
   fi
-  [ "$payload" != 0x ] || fail "$checker returned canExec with an empty payload."
+  if [ "$payload" = 0x ]; then
+    checker_error "$checker returned canExec with an empty payload."
+    return 0
+  fi
 
   gas=$(cast estimate "$CONTRACT" "$payload" --from "$keeper" --rpc-url "$rpc" 2>&1) \
-    || fail "$checker: gas estimation failed: $(head -c 500 <<<"$gas")"
+    || { checker_error "$checker: gas estimation failed: $(head -c 500 <<<"$gas")"; return 0; }
   gas_limit=$((gas * GAS_LIMIT_MULTIPLIER_PCT / 100))
   if [ "$gas_limit" -gt "$MAX_GAS_LIMIT" ]; then
-    fail "$checker: gas limit $gas_limit (estimate $gas) exceeds SAVING_CIRCLES_MAX_GAS_LIMIT $MAX_GAS_LIMIT."
+    checker_error "$checker: gas limit $gas_limit (estimate $gas) exceeds SAVING_CIRCLES_MAX_GAS_LIMIT $MAX_GAS_LIMIT."
+    return 0
   fi
 
   if [ -n "${DRY_RUN:-}" ]; then
@@ -99,10 +118,12 @@ run_checker() {
     return 0
   fi
 
-  out=$(cast send "$CONTRACT" "$payload" --private-key "$SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY" \
-    --rpc-url "$rpc" --gas-limit "$gas_limit" --timeout 300 --json 2>&1) \
-    && [ "$(jq -r '.status' <<<"$out" 2>/dev/null)" = 0x1 ] \
-    || fail "$checker: execution failed: $(head -c 500 <<<"$out")"
+  if ! out=$(cast send "$CONTRACT" "$payload" --private-key "$SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY" \
+      --rpc-url "$rpc" --gas-limit "$gas_limit" --timeout 300 --json 2>&1) \
+    || [ "$(jq -r '.status' <<<"$out" 2>/dev/null)" != 0x1 ]; then
+    checker_error "$checker: execution failed: $(head -c 500 <<<"$out")"
+    return 0
+  fi
 
   tx=$(jq -r '.transactionHash' <<<"$out")
   failures=$(jq --arg c "$CONTRACT" --arg t "$failed_topic" \
@@ -111,7 +132,6 @@ run_checker() {
   empty_reason=$(jq --arg e "0x$(printf '%064x%064x' 32 0)" '[.[] | select(.data == $e)] | length' <<<"$failures")
   failures=$(jq length <<<"$failures")
   log "$checker: executed in $tx ($failures member failures, $empty_reason with empty reason)"
-  clear_alert failed
 
   if [ "$empty_reason" -gt 0 ]; then
     alert out-of-gas "$checker batch ran but $empty_reason member call(s) reverted with no reason, likely out of gas. Raise SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT: ${EXPLORER_TX_URL}${tx}"
@@ -124,4 +144,9 @@ run_checker() {
 
 run_checker depositChecker "$DEPOSIT_FAILED_TOPIC"
 run_checker claimChecker "$CLAIM_FAILED_TOPIC"
+
+if [ "${#errors[@]}" -gt 0 ]; then
+  fail "$(printf '%s\n' "${errors[@]}")"
+fi
+clear_alert failed
 ping_health
