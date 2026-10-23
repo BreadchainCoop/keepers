@@ -1,6 +1,6 @@
 # Jobs poll their contract's own readiness check, so a missed run is retried on the next tick.
 # supercronic never overlaps runs of the same job.
 */30 * * * * /app/jobs/distribute-yield.sh
-# Matches the previous Cloudflare executor's daily run; the checkers make polling more often safe.
-0 0 * * * /app/jobs/saving-circles.sh gnosis
-0 0 * * * /app/jobs/saving-circles.sh celo
+# Hourly so a transient failure delays deposits and claims by an hour, not a day.
+0 * * * * /app/jobs/saving-circles.sh gnosis
+0 * * * * /app/jobs/saving-circles.sh celo

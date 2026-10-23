@@ -7,8 +7,8 @@ Small container that calls permissionless maintenance functions on Bread contrac
 | Job | Contract | Schedule |
 |---|---|---|
 | [`distribute-yield`](jobs/distribute-yield.sh) | Yield distributor on Gnosis, `0xeE95A62b749d8a2520E0128D9b3aCa241269024b` | Polled every 30 min |
-| [`saving-circles gnosis`](jobs/saving-circles.sh) | AutomaticSavingCircles on Gnosis, `0xdbe5e71950614A9508655Ca157EeD0B3F4167d78` | Daily, 00:00 UTC |
-| [`saving-circles celo`](jobs/saving-circles.sh) | AutomaticSavingCircles on Celo, `0x8c6e6849F488419cd2e9DBBb79A8e73B10c9Dd51` | Daily, 00:00 UTC |
+| [`saving-circles gnosis`](jobs/saving-circles.sh) | AutomaticSavingCircles on Gnosis, `0xdbe5e71950614A9508655Ca157EeD0B3F4167d78` | Polled hourly |
+| [`saving-circles celo`](jobs/saving-circles.sh) | AutomaticSavingCircles on Celo, `0x8c6e6849F488419cd2e9DBBb79A8e73B10c9Dd51` | Polled hourly |
 
 ### distribute-yield
 
@@ -48,6 +48,7 @@ Each run:
 - alerts if the executor balance is below the per-network minimum (0.2 xDAI, 1 CELO)
 - sends with a gas limit of 200% of the estimate (`SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT`), and refuses anything above `SAVING_CIRCLES_MAX_GAS_LIMIT` (3M); batch cost grows with circle size
 - reports members whose deposit or claim failed inside an otherwise successful batch (`AutomatedDepositFailed` / `AutomatedClaimFailed`), and alerts separately when the reason is empty
+- still runs claims when the deposit batch fails, then fails the run if either did
 
 The headroom is large on purpose. Each member runs inside a try/catch, so `eth_estimateGas` returns a
 limit at which the batch succeeds but a member's call runs out of gas and is only logged as failed;
@@ -70,7 +71,11 @@ See [`.env.example`](.env.example).
 | `DRY_RUN` | no | `1` does everything except send the transaction. |
 | `SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY` | yes | Wallet set as `automationExecutor` on each AutomaticSavingCircles contract. Holds only gas money. |
 | `SAVING_CIRCLES_GNOSIS_RPC_URLS`, `SAVING_CIRCLES_CELO_RPC_URLS` | no | Comma-separated RPC endpoints per network, tried in order. Default to public RPCs. |
-| `SAVING_CIRCLES_HEALTHCHECK_URL` | no | Separate check for the daily runs (period 1 day). Falls back to `HEALTHCHECK_URL`. |
+| `SAVING_CIRCLES_GNOSIS_HEALTHCHECK_URL`, `SAVING_CIRCLES_CELO_HEALTHCHECK_URL` | no | One check per network (period 1h, about 1h grace). No fallback to `HEALTHCHECK_URL`, so `distribute-yield` pings can't mask a dead job. |
+| `SAVING_CIRCLES_GNOSIS_ADDRESS`, `SAVING_CIRCLES_CELO_ADDRESS` | no | Override the AutomaticSavingCircles contract per network. |
+| `SAVING_CIRCLES_GNOSIS_MIN_BALANCE`, `SAVING_CIRCLES_CELO_MIN_BALANCE` | no | Low-balance alert threshold per network. Default `0.2` xDAI, `1` CELO. |
+| `SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT` | no | Gas limit as a percentage of the estimate. Default `200`. |
+| `SAVING_CIRCLES_MAX_GAS_LIMIT` | no | Refuse to send a batch whose gas limit exceeds this. Default `3000000`. |
 
 ## Deploy
 
