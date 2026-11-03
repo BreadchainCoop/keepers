@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Runs the deposits and claims that AutomaticSavingCircles reports as due on one network.
-# Usage: saving-circles.sh <gnosis|celo>
+# Usage: saving-circles.sh <gnosis|celo|sepolia>
 set -euo pipefail
 
-NETWORK=${1:?usage: saving-circles.sh <gnosis|celo>}
+NETWORK=${1:?usage: saving-circles.sh <gnosis|celo|sepolia>}
 
 case "$NETWORK" in
   gnosis)
@@ -21,6 +21,14 @@ case "$NETWORK" in
     DEFAULT_EXPLORER_TX_URL=https://celoscan.io/tx/
     DEFAULT_MIN_BALANCE=1
     SYMBOL=CELO
+    ;;
+  sepolia)
+    PREFIX=SAVING_CIRCLES_SEPOLIA
+    DEFAULT_CONTRACT=0xb75320178b00eabacafa00545f9d1ed90a5fc8ce
+    DEFAULT_RPC_URLS=https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.gateway.tenderly.co
+    DEFAULT_EXPLORER_TX_URL=https://sepolia.etherscan.io/tx/
+    DEFAULT_MIN_BALANCE=0.2
+    SYMBOL=ETH
     ;;
   *)
     echo "unsupported network: $NETWORK" >&2
