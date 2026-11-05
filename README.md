@@ -9,7 +9,7 @@ Small container that calls permissionless maintenance functions on Bread contrac
 | [`distribute-yield`](jobs/distribute-yield.sh) | Yield distributor on Gnosis, `0xeE95A62b749d8a2520E0128D9b3aCa241269024b` | Polled every 30 min |
 | [`saving-circles gnosis`](jobs/saving-circles.sh) | AutomaticSavingCircles on Gnosis, `0xdbe5e71950614A9508655Ca157EeD0B3F4167d78` | Polled hourly |
 | [`saving-circles celo`](jobs/saving-circles.sh) | AutomaticSavingCircles on Celo, `0x8c6e6849F488419cd2e9DBBb79A8e73B10c9Dd51` | Polled hourly |
-| [`saving-circles sepolia`](jobs/saving-circles.sh) | AutomaticSavingCircles on Sepolia, `0xb75320178b00eabacafa00545f9d1ed90a5fc8ce` | Testnet: own deployment |
+| [`saving-circles sepolia`](jobs/saving-circles.sh) | AutomaticSavingCircles on Sepolia, `0xb75320178b00eabacafa00545f9d1ed90a5fc8ce` | Polled hourly |
 
 ### distribute-yield
 
@@ -54,16 +54,13 @@ Each run:
 The headroom is large on purpose. Each member runs inside a try/catch, so `eth_estimateGas` returns a
 limit at which the batch succeeds but a member's call runs out of gas and is only logged as failed;
 on Gnosis a one-member deposit estimated ~300k but needed ~400k. On Sepolia a one-member deposit
-estimated ~368k and needed over ~460k (see the Sepolia note below). Unused gas is not charged.
+estimated ~368k and needed over ~460k. Unused gas is not charged.
 
 #### Sepolia (testnet)
 
-`bash jobs/saving-circles.sh sepolia` runs the same job against AutomaticSavingCircles on Sepolia,
-`0xb75320178b00eabacafa00545f9d1ed90a5fc8ce`, the contract the Stacks frontend (`app-stacks`) uses
-on testnet. It is deliberately **not** in the shared crontab: a prod container's
-`SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY` is the Gnosis/Celo executor, which is not `automationExecutor`
-on Sepolia, so scheduling it here would fail every run. Give the Sepolia deployment its own container
-(or a crontab override) with the Sepolia executor key wired via `setAutomationExecutor`.
+`saving-circles sepolia` targets `0xb75320178b00eabacafa00545f9d1ed90a5fc8ce`, the contract the Stacks
+frontend (`app-stacks`) uses on testnet. It shares the Gnosis/Celo `automationExecutor`, so it runs
+from the same container and key; the executor needs Sepolia ETH as well.
 
 A missed or failed run is retried on the next tick: the checkers keep returning the work until it
 is done.
