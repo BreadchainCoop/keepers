@@ -4,3 +4,4 @@
 # Hourly so a transient failure delays deposits and claims by an hour, not a day.
 0 * * * * /app/jobs/saving-circles.sh gnosis
 0 * * * * /app/jobs/saving-circles.sh celo
+0 * * * * /app/jobs/saving-circles.sh sepolia
