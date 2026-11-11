@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared helpers for keeper jobs. Source from a job after setting JOB.
 
 : "${JOB:?JOB must be set before sourcing common.sh}"
@@ -31,7 +32,8 @@ notify() {
 
 # A failing job runs every tick; the cooldown keeps one problem from becoming a flood.
 alert() {
-  local key=$1 message=$2 stamp="$STATE_DIR/$JOB.$1.alerted" now
+  local key=$1 message=$2 stamp now
+  stamp="$STATE_DIR/$JOB.$key.alerted"
   now=$(date +%s)
   if [ -f "$stamp" ] && [ $((now - $(cat "$stamp"))) -lt "$ALERT_COOLDOWN_SECONDS" ]; then
     return 0

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 JOB=distribute-yield
+# shellcheck source=lib/common.sh
 . "$(dirname "$0")/../lib/common.sh"
 
 : "${KEEPER_PRIVATE_KEY:?KEEPER_PRIVATE_KEY is required}"
