@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Runs the deposits and claims that AutomaticSavingCircles reports as due on one network.
-# Usage: saving-circles.sh <gnosis|celo|sepolia>
+# Usage: saving-circles.sh <gnosis|celo|sepolia|polygon>
 set -euo pipefail
 
-NETWORK=${1:?usage: saving-circles.sh <gnosis|celo|sepolia>}
+NETWORK=${1:?usage: saving-circles.sh <gnosis|celo|sepolia|polygon>}
 
 case "$NETWORK" in
   gnosis)
@@ -30,6 +30,17 @@ case "$NETWORK" in
     DEFAULT_MIN_BALANCE=0.2
     SYMBOL=ETH
     ;;
+  polygon)
+    PREFIX=SAVING_CIRCLES_POLYGON
+    # Same address as on Celo (same deployer nonce), separate contract and state.
+    DEFAULT_CONTRACT=0x8c6e6849F488419cd2e9DBBb79A8e73B10c9Dd51
+    # polygon-rpc.com needs an API key and publicnode refuses receipt lookups without a token, which
+    # would break cast send after broadcasting. Set SAVING_CIRCLES_POLYGON_RPC_URLS to a keyed RPC.
+    DEFAULT_RPC_URLS=https://polygon.drpc.org
+    DEFAULT_EXPLORER_TX_URL=https://polygonscan.com/tx/
+    DEFAULT_MIN_BALANCE=5
+    SYMBOL=POL
+    ;;
   *)
     echo "unsupported network: $NETWORK" >&2
     exit 2
@@ -55,8 +66,9 @@ CONTRACT=${!contract_var:-$DEFAULT_CONTRACT}
 MIN_BALANCE=${!min_balance_var:-$DEFAULT_MIN_BALANCE}
 # The batch wraps each member in try/catch, so eth_estimateGas finds a limit where the batch succeeds but
 # a member's inner call runs out of gas and is silently recorded as failed. On Gnosis a 1-member deposit
-# estimates ~300k but needs ~400k. Unused gas is not charged, so keep wide headroom.
-GAS_LIMIT_MULTIPLIER_PCT=${SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT:-200}
+# estimates ~300k but needs ~400k. On Sepolia a 2-member deposit estimated ~493k: at 200% (985k) the
+# second member ran out of gas, while 1.1M was enough. Unused gas is not charged, so keep wide headroom.
+GAS_LIMIT_MULTIPLIER_PCT=${SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT:-400}
 # Batch cost grows with circle size; refuse to send anything estimated above this.
 MAX_GAS_LIMIT=${SAVING_CIRCLES_MAX_GAS_LIMIT:-3000000}
 # Emitted per member when one deposit or claim inside a batch reverts; the batch itself still succeeds.
