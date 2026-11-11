@@ -27,6 +27,8 @@ WORKDIR /app
 COPY --chown=keeper:keeper crontab ./
 COPY --chown=keeper:keeper lib ./lib
 COPY --chown=keeper:keeper jobs ./jobs
+# supercronic execs jobs directly; don't depend on the git file mode surviving merges (see 57333b1).
+RUN chmod +x jobs/*.sh
 USER keeper
 
 CMD ["supercronic", "-passthrough-logs", "/app/crontab"]
