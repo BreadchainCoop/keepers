@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash syntax
+        run: for f in jobs/*.sh lib/*.sh; do bash -n "$f"; done
+
+      - name: ShellCheck
+        # shellcheck is preinstalled on GitHub's Ubuntu runners.
+        run: shellcheck --severity=warning jobs/*.sh lib/*.sh
+
+      # A merge once dropped the exec bit on saving-circles.sh (57333b1); supercronic can't run it then.
+      - name: Job scripts are executable
+        run: |
+          for f in jobs/*.sh; do
+            test -x "$f" || { echo "::error file=$f::not executable (git update-index --chmod=+x $f)"; exit 1; }
+          done
+
+      - name: Crontab only references existing job scripts
+        run: |
+          grep -v '^[[:space:]]*#' crontab | grep -oE '/app/jobs/[^ ]+' | sed 's#^/app/##' | sort -u |
+            while read -r f; do
+              test -x "$f" || { echo "::error file=crontab::$f does not exist or is not executable"; exit 1; }
+            done
+
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose file is valid
+        run: KEEPER_PRIVATE_KEY=ci docker compose config --quiet
+
+      - name: Build image
+        run: docker build -t keepers:ci .
+
+      - name: Crontab parses
+        run: docker run --rm keepers:ci supercronic -test /app/crontab
+
+      - name: Runtime tools are present
+        run: docker run --rm keepers:ci sh -c 'cast --version && jq --version && curl --version | head -n1'
