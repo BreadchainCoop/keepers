@@ -3,7 +3,9 @@
 */30 * * * * /app/jobs/distribute-yield.sh
 # Hourly so a transient failure delays deposits and claims by an hour, not a day.
 # Staggered so runs don't stack up against the container's 128 MB memory limit.
-5 * * * * /app/jobs/saving-circles.sh gnosis
-10 * * * * /app/jobs/saving-circles.sh celo
+# Disabled until the executor wallet is funded and set as automationExecutor on Gnosis and Celo;
+# until then every run would fail at the executor check and alert.
+# 5 * * * * /app/jobs/saving-circles.sh gnosis
+# 10 * * * * /app/jobs/saving-circles.sh celo
 15 * * * * /app/jobs/saving-circles.sh sepolia
 20 * * * * /app/jobs/saving-circles.sh polygon
