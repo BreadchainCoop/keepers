@@ -9,7 +9,8 @@ Small container that calls permissionless maintenance functions on Bread contrac
 | [`distribute-yield`](jobs/distribute-yield.sh) | Yield distributor on Gnosis, `0xeE95A62b749d8a2520E0128D9b3aCa241269024b` | Polled every 30 min |
 | [`saving-circles gnosis`](jobs/saving-circles.sh) | AutomaticSavingCircles on Gnosis, `0xdbe5e71950614A9508655Ca157EeD0B3F4167d78` | Polled hourly |
 | [`saving-circles celo`](jobs/saving-circles.sh) | AutomaticSavingCircles on Celo, `0x8c6e6849F488419cd2e9DBBb79A8e73B10c9Dd51` | Polled hourly |
-| [`saving-circles sepolia`](jobs/saving-circles.sh) | AutomaticSavingCircles on Sepolia, `0xb75320178b00eabacafa00545f9d1ed90a5fc8ce` | Testnet: own deployment |
+| [`saving-circles sepolia`](jobs/saving-circles.sh) | AutomaticSavingCircles on Sepolia, `0xb75320178b00eabacafa00545f9d1ed90a5fc8ce` | Polled hourly |
+| [`saving-circles polygon`](jobs/saving-circles.sh) | AutomaticSavingCircles on Polygon, `0x8c6e6849F488419cd2e9DBBb79A8e73B10c9Dd51` | Polled hourly |
 
 ### distribute-yield
 
@@ -46,24 +47,32 @@ cast send <AutomaticSavingCircles> 'setAutomationExecutor(address)' <executor-ad
 
 Each run:
 - fails (and alerts) if the executor wallet is not `automationExecutor`
-- alerts if the executor balance is below the per-network minimum (0.2 xDAI, 1 CELO, 0.2 ETH)
-- sends with a gas limit of 200% of the estimate (`SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT`), and refuses anything above `SAVING_CIRCLES_MAX_GAS_LIMIT` (3M); batch cost grows with circle size
+- alerts if the executor balance is below the per-network minimum (0.2 xDAI, 1 CELO, 0.2 ETH, 5 POL)
+- sends with a gas limit of 400% of the estimate (`SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT`), and refuses anything above `SAVING_CIRCLES_MAX_GAS_LIMIT` (3M); batch cost grows with circle size
 - reports members whose deposit or claim failed inside an otherwise successful batch (`AutomatedDepositFailed` / `AutomatedClaimFailed`), and alerts separately when the reason is empty
 - still runs claims when the deposit batch fails, then fails the run if either did
 
 The headroom is large on purpose. Each member runs inside a try/catch, so `eth_estimateGas` returns a
 limit at which the batch succeeds but a member's call runs out of gas and is only logged as failed;
 on Gnosis a one-member deposit estimated ~300k but needed ~400k. On Sepolia a one-member deposit
-estimated ~368k and needed over ~460k (see the Sepolia note below). Unused gas is not charged.
+estimated ~368k and needed over ~460k, and a two-member deposit estimated ~493k: at the old 200%
+default (985k) the second member's `depositFor` ran out of gas, while 1.1M was enough. Unused gas is
+not charged.
+
+All four networks share one executor wallet, so `SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY` must be
+`automationExecutor` on each contract; a network where it isn't fails (and alerts) every run.
 
 #### Sepolia (testnet)
 
-`bash jobs/saving-circles.sh sepolia` runs the same job against AutomaticSavingCircles on Sepolia,
-`0xb75320178b00eabacafa00545f9d1ed90a5fc8ce`, the contract the Stacks frontend (`app-stacks`) uses
-on testnet. It is deliberately **not** in the shared crontab: a prod container's
-`SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY` is the Gnosis/Celo executor, which is not `automationExecutor`
-on Sepolia, so scheduling it here would fail every run. Give the Sepolia deployment its own container
-(or a crontab override) with the Sepolia executor key wired via `setAutomationExecutor`.
+AutomaticSavingCircles on Sepolia, `0xb75320178b00eabacafa00545f9d1ed90a5fc8ce`, is the contract the
+Stacks frontend (`app-stacks`) uses on testnet.
+
+#### Polygon
+
+AutomaticSavingCircles on Polygon has the same address as on Celo (the deployer was at the same nonce),
+but it is a separate contract with its own state. `polygon-rpc.com` requires an API key and publicnode
+refuses receipt lookups without a token, so set `SAVING_CIRCLES_POLYGON_RPC_URLS` to a keyed RPC
+(Alchemy / Infura); the default is `polygon.drpc.org`.
 
 A missed or failed run is retried on the next tick: the checkers keep returning the work until it
 is done.
@@ -81,11 +90,11 @@ See [`.env.example`](.env.example).
 | `MIN_BALANCE_XDAI` | no | Threshold for the low-balance alert. Default `0.2`. |
 | `DRY_RUN` | no | `1` does everything except send the transaction. |
 | `SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY` | yes | Wallet set as `automationExecutor` on each AutomaticSavingCircles contract. Holds only gas money. |
-| `SAVING_CIRCLES_GNOSIS_RPC_URLS`, `SAVING_CIRCLES_CELO_RPC_URLS`, `SAVING_CIRCLES_SEPOLIA_RPC_URLS` | no | Comma-separated RPC endpoints per network, tried in order. Default to public RPCs. |
-| `SAVING_CIRCLES_GNOSIS_HEALTHCHECK_URL`, `SAVING_CIRCLES_CELO_HEALTHCHECK_URL`, `SAVING_CIRCLES_SEPOLIA_HEALTHCHECK_URL` | no | One check per network (period 1h, about 1h grace). No fallback to `HEALTHCHECK_URL`, so `distribute-yield` pings can't mask a dead job. |
-| `SAVING_CIRCLES_GNOSIS_ADDRESS`, `SAVING_CIRCLES_CELO_ADDRESS`, `SAVING_CIRCLES_SEPOLIA_ADDRESS` | no | Override the AutomaticSavingCircles contract per network. |
-| `SAVING_CIRCLES_GNOSIS_MIN_BALANCE`, `SAVING_CIRCLES_CELO_MIN_BALANCE`, `SAVING_CIRCLES_SEPOLIA_MIN_BALANCE` | no | Low-balance alert threshold per network. Default `0.2` xDAI, `1` CELO, `0.2` ETH. |
-| `SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT` | no | Gas limit as a percentage of the estimate. Default `200`. |
+| `SAVING_CIRCLES_{GNOSIS,CELO,SEPOLIA,POLYGON}_RPC_URLS` | no | Comma-separated RPC endpoints per network, tried in order. Default to public RPCs; use a keyed one for Polygon. |
+| `SAVING_CIRCLES_{GNOSIS,CELO,SEPOLIA,POLYGON}_HEALTHCHECK_URL` | no | One check per network (period 1h, about 1h grace). No fallback to `HEALTHCHECK_URL`, so `distribute-yield` pings can't mask a dead job. |
+| `SAVING_CIRCLES_{GNOSIS,CELO,SEPOLIA,POLYGON}_ADDRESS` | no | Override the AutomaticSavingCircles contract per network. |
+| `SAVING_CIRCLES_{GNOSIS,CELO,SEPOLIA,POLYGON}_MIN_BALANCE` | no | Low-balance alert threshold per network. Default `0.2` xDAI, `1` CELO, `0.2` ETH, `5` POL. |
+| `SAVING_CIRCLES_GAS_LIMIT_MULTIPLIER_PCT` | no | Gas limit as a percentage of the estimate. Default `400`. |
 | `SAVING_CIRCLES_MAX_GAS_LIMIT` | no | Refuse to send a batch whose gas limit exceeds this. Default `3000000`. |
 
 ## Deploy
