@@ -18,8 +18,9 @@ jobs:
         run: for f in jobs/*.sh lib/*.sh; do bash -n "$f"; done
 
       - name: ShellCheck
-        # shellcheck is preinstalled on GitHub's Ubuntu runners.
-        run: shellcheck --severity=warning jobs/*.sh lib/*.sh
+        # Preinstalled on GitHub's Ubuntu runners. -x follows the `source=lib/common.sh` directives
+        # (resolved from the repo root) so variables set for common.sh aren't flagged as unused.
+        run: shellcheck -x --severity=warning jobs/*.sh lib/*.sh
 
       # A merge once dropped the exec bit on saving-circles.sh (57333b1); supercronic can't run it then.
       - name: Job scripts are executable

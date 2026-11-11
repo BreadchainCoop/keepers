@@ -59,6 +59,7 @@ EXPLORER_TX_URL=$DEFAULT_EXPLORER_TX_URL
 HEALTHCHECK_URL=${!healthcheck_var:-}
 
 JOB=saving-circles-$NETWORK
+# shellcheck source=lib/common.sh
 . "$(dirname "$0")/../lib/common.sh"
 
 [ -n "${SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY:-}" ] || fail "SAVING_CIRCLES_EXECUTOR_PRIVATE_KEY is not set."
