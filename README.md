@@ -2,6 +2,38 @@
 
 Small container that calls permissionless maintenance functions on Bread contracts when they come due.
 
+> **`near-hackathon` branch.** A temporary branch for the NEAR hackathon (1–14 Nov 2026). Its
+> crontab runs only [`saving-circles-near`](jobs/saving-circles-near.sh), and it deploys as its own
+> Coolify resource; the EVM jobs keep running from `main` on another host. Delete the branch and the
+> resource after the hackathon.
+>
+> **What it does.** Every 10 minutes it lists the active circles on the NEAR Saving Circles contract
+> (`next_id`, `get_circles`), asks `get_due(circle_id)` for each, and calls the permissionless
+> `process_due(circle_id)` when deposits or claims are listed
+> ([saving-circles-near#23](https://github.com/BreadchainCoop/saving-circles-near/pull/23)). It attaches
+> 300 TGas (unused gas is refunded), then reads the final outcome of every receipt to report
+> `funds_deposited`, `funds_withdrawn`, `automated_deposit_failed` and `payout_failed`. A circle whose
+> only due claims failed to pay out recently is skipped for 6h instead of retried every run.
+> Underfunded members are reported (at most every 6h per circle) without sending a transaction.
+>
+> **Keeper key.** Use a function-call access key on the keeper account, limited to receiver
+> `circles.bread-saving-circles.testnet` and method `process_due`, with a gas allowance (e.g. 1 NEAR).
+> It can't move NEAR or call anything else. The job checks the key's receiver, methods and remaining
+> allowance on every run.
+>
+> | Variable | Required | Purpose |
+> |---|---|---|
+> | `NEAR_KEEPER_ACCOUNT_ID` | yes | Keeper account, e.g. `keeper.bread-saving-circles.testnet`. Holds only gas money. |
+> | `NEAR_KEEPER_PUBLIC_KEY` | yes | `ed25519:…` public key of the function-call key. |
+> | `NEAR_KEEPER_PRIVATE_KEY` | yes, unless `DRY_RUN` | `ed25519:…` private key of that key. Secret. |
+> | `SAVING_CIRCLES_NEAR_NETWORK` | no | `testnet` (default) or `mainnet`. |
+> | `SAVING_CIRCLES_NEAR_CONTRACT` | no | Default `circles.bread-saving-circles.testnet` on testnet; required on mainnet. |
+> | `SAVING_CIRCLES_NEAR_RPC_URLS` | no | Comma-separated RPCs for views and outcomes. Default FastNEAR, then `rpc.testnet.near.org`. Sends use near-cli-rs's built-in network config. |
+> | `SAVING_CIRCLES_NEAR_HEALTHCHECK_URL` | no | healthchecks.io check (10 min period, about 30 min grace). |
+> | `SAVING_CIRCLES_NEAR_MIN_BALANCE` | no | Low-balance alert for the keeper account. Default `2` NEAR. |
+> | `SAVING_CIRCLES_NEAR_MIN_ALLOWANCE` | no | Low-allowance alert for the keeper key. Default `0.2` NEAR. |
+> | `DISCORD_WEBHOOK_URL`, `DRY_RUN` | no | As below. |
+
 ## Jobs
 
 | Job | Contract | Schedule |

@@ -1,9 +1,4 @@
-# Jobs poll their contract's own readiness check, so a missed run is retried on the next tick.
+# near-hackathon branch: NEAR-only deployment. The EVM jobs run from main on another host.
 # supercronic never overlaps runs of the same job.
-*/30 * * * * /app/jobs/distribute-yield.sh
-# Hourly so a transient failure delays deposits and claims by an hour, not a day.
-# Staggered so runs don't stack up against the container's 128 MB memory limit.
-5 * * * * /app/jobs/saving-circles.sh gnosis
-10 * * * * /app/jobs/saving-circles.sh celo
-15 * * * * /app/jobs/saving-circles.sh sepolia
-20 * * * * /app/jobs/saving-circles.sh polygon
+# Every 10 minutes so demo circles with short rounds are processed promptly; get_due views are free.
+*/10 * * * * /app/jobs/saving-circles-near.sh
