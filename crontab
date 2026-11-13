@@ -1,4 +1,5 @@
 # near-hackathon branch: NEAR-only deployment. The EVM jobs run from main on another host.
 # supercronic never overlaps runs of the same job.
-# Every 10 minutes so demo circles with short rounds are processed promptly; get_due views are free.
-*/10 * * * * /app/jobs/saving-circles-near.sh
+# Every minute: process_due only deposits for the current round, so a demo circle with 5-minute
+# rounds needs runs well inside each round. A run is a few free views unless something is due.
+* * * * * /app/jobs/saving-circles-near.sh

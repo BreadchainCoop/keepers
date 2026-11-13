@@ -7,7 +7,8 @@ Small container that calls permissionless maintenance functions on Bread contrac
 > Coolify resource; the EVM jobs keep running from `main` on another host. Delete the branch and the
 > resource after the hackathon.
 >
-> **What it does.** Every 10 minutes it lists the active circles on the NEAR Saving Circles contract
+> **What it does.** Every minute (demo circles can have 5-minute rounds, and `process_due` only
+> deposits for the current round) it lists the active circles on the NEAR Saving Circles contract
 > (`next_id`, `get_circles`), asks `get_due(circle_id)` for each, and calls the permissionless
 > `process_due(circle_id)` when deposits or claims are listed
 > ([saving-circles-near#23](https://github.com/BreadchainCoop/saving-circles-near/pull/23)). It attaches
@@ -29,7 +30,7 @@ Small container that calls permissionless maintenance functions on Bread contrac
 > | `SAVING_CIRCLES_NEAR_NETWORK` | no | `testnet` (default) or `mainnet`. |
 > | `SAVING_CIRCLES_NEAR_CONTRACT` | no | Default `circles.bread-saving-circles.testnet` on testnet; required on mainnet. |
 > | `SAVING_CIRCLES_NEAR_RPC_URLS` | no | Comma-separated RPCs for views and outcomes. Default FastNEAR, then `rpc.testnet.near.org`. Sends use near-cli-rs's built-in network config. |
-> | `SAVING_CIRCLES_NEAR_HEALTHCHECK_URL` | no | healthchecks.io check (10 min period, about 30 min grace). |
+> | `SAVING_CIRCLES_NEAR_HEALTHCHECK_URL` | no | healthchecks.io check (1 min period, about 10 min grace). |
 > | `SAVING_CIRCLES_NEAR_MIN_BALANCE` | no | Low-balance alert for the keeper account. Default `2` NEAR. |
 > | `SAVING_CIRCLES_NEAR_MIN_ALLOWANCE` | no | Low-allowance alert for the keeper key. Default `0.2` NEAR. |
 > | `DISCORD_WEBHOOK_URL`, `DRY_RUN` | no | As below. |
